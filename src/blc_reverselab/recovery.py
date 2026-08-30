@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 _STRING_LITERAL_RE = re.compile(r'"((?:\\.|[^"\\]){8,})"')
-_HEX_RE = re.compile(r"^[0-9a-fA-F]{16,}$")
+_HEX_RE = re.compile(r"^[0-9a-fA-F]{8,}$")
 _BASE64_RE = re.compile(r"^[A-Za-z0-9+/]{16,}={0,2}$")
 
 
@@ -36,7 +36,7 @@ def _preview(data: bytes, limit: int = 160) -> str:
 
 def _decode_reversible(value: str) -> tuple[str, bytes] | None:
     compact = value.strip()
-    if len(compact) >= 16 and len(compact) % 2 == 0 and _HEX_RE.fullmatch(compact):
+    if len(compact) >= 8 and len(compact) % 2 == 0 and _HEX_RE.fullmatch(compact):
         try:
             decoded = bytes.fromhex(compact)
         except ValueError:
