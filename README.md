@@ -17,6 +17,25 @@ Evidence-first reverse engineering workspace for **authorized analysis, debuggin
 
 The core deliberately separates evidence collection from tool-specific adapters. Future JADX, Ghidra, runtime-observation and visualization integrations feed the same evidence model.
 
+## BLCGameSecLab integration
+
+BLCReverseLab is the artifact-analysis layer. Its JSON evidence can be consumed by **BLCGameSecLab** so an authorized game-security pipeline can reuse the exact target fingerprint, detected engine, DEX/native inventory, tool-readiness state, and upstream evidence instead of starting over.
+
+```text
+Target artifact
+    |
+    v
+BLCReverseLab
+    |
+    | analysis.json
+    v
+BLCGameSecLab
+    |
+    +--> trust model
+    +--> security regression
+    +--> findings / remediation / retest
+```
+
 ## Quick start
 
 ```bash
