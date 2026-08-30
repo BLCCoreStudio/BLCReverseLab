@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .diff import compare
+from .native import GhidraStep
 from .pipeline import Pipeline
 
 
@@ -35,6 +36,23 @@ def main() -> None:
         help="Optional developer-supplied rename mapping (for example ProGuard/R8 mapping.txt)",
     )
     analyze.add_argument(
+        "--ghidra",
+        action="store_true",
+        help="Run optional Ghidra Headless analysis for native binaries/libraries",
+    )
+    analyze.add_argument(
+        "--ghidra-timeout",
+        type=int,
+        default=300,
+        help="Ghidra analysis timeout per native target in seconds (default: 300)",
+    )
+    analyze.add_argument(
+        "--ghidra-max-native",
+        type=int,
+        default=8,
+        help="Maximum native libraries extracted from a package for Ghidra analysis (default: 8)",
+    )
+    analyze.add_argument(
         "--workdir",
         default=".blc-reverselab",
         help="Directory used by optional external-analysis adapters",
@@ -47,12 +65,21 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.command == "analyze":
+        workdir = Path(args.workdir)
         pipeline = Pipeline(
             enable_jadx=args.jadx or args.recover,
             enable_recovery=args.recover,
             mappings_path=args.mapping,
-            workdir=args.workdir,
+            workdir=workdir,
         )
+        if args.ghidra:
+            pipeline.steps.append(
+                GhidraStep(
+                    workdir,
+                    timeout_seconds=max(30, args.ghidra_timeout),
+                    max_native_targets=max(1, args.ghidra_max_native),
+                )
+            )
         ctx = pipeline.analyze(args.target)
         out = Pipeline.save(ctx, args.output)
         print(json.dumps(ctx.to_dict(), indent=2, sort_keys=True))

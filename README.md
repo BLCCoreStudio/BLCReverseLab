@@ -2,100 +2,99 @@
 
 Evidence-first reverse engineering workspace for **authorized analysis, debugging, malware research, CTFs, interoperability, and application security**.
 
-## v0.3 alpha milestone
+## v0.4 alpha milestone
 
-BLCReverseLab now includes an initial **Deobfuscation & Recovery Pipeline** on top of the v0.2 evidence graph and version-intelligence core.
+BLCReverseLab now combines Android decompilation/recovery with the first real native-code analysis layer.
 
-Current capabilities:
+### Current analysis stack
 
-- APK/AAB/APKS/XAPK/DEX/SO/EXE/DLL artifact fingerprinting.
-- Android package mapping with stable fingerprints for DEX, native libraries, manifests, resource tables, and Unity metadata.
-- `BLCEvidenceGraph`: evidence nodes, provenance links, confidence, graph statistics, queries, and unresolved-link checks.
-- Build-to-build version intelligence that detects **changed files even when their names stay the same**.
-- Analysis reuse ratio for incremental follow-up work.
-- Optional real JADX CLI adapter.
-- JADX recovery mode using deobfuscation, source-name aliases, identifier repair, and resource-extension recovery.
-- Optional developer-supplied rename mappings such as ProGuard/R8 `mapping.txt`.
-- Readable-code recovery profiler that measures suspicious/obfuscated identifiers.
-- Safe recovery of reversible literal encodings such as Base64 and hex when they decode to readable text.
-- High-entropy literal detection to flag likely packed/encrypted/encoded data for deeper authorized analysis.
-- Machine-readable schema marker: `blc.reverselab.analysis/v1`.
+- APK/AAB/APKS/XAPK/DEX/SO/EXE/DLL fingerprinting.
+- Android package mapping and tracked-entry fingerprints.
+- `BLCEvidenceGraph` provenance graph.
+- Build-to-build version intelligence, including same-name changed files.
+- Real optional JADX CLI integration.
+- JADX recovery mode with deobfuscation, source-name aliases, rename repair, resource-extension recovery, and optional developer mappings.
+- Readability/obfuscation scoring.
+- Safe reversible Base64/hex literal recovery and high-entropy protected-content signals.
+- **Optional Ghidra Headless integration for native `.so`, `.exe`, and `.dll` targets.**
+- Native function inventory exported by a bundled read-only Ghidra post-analysis script.
+- Counts for discovered functions, generic/unnamed `FUN_*`-style functions, externals, thunks, and JNI export candidates.
+- APK native-library extraction with prioritized analysis of common game/native libraries.
+
+## Why the native layer matters
+
+Java/Kotlin decompilation is only part of many Android applications. Important behavior can live behind JNI in native `.so` libraries. A stripped library may have few useful original symbols even though executable functions remain. Ghidra's auto-analysis can identify function boundaries and represent unnamed functions with generated names; BLCReverseLab records these as evidence rather than pretending the original source-level names still exist.
+
+```text
+APK / native binary
+       |
+       +--> Java/Kotlin -> JADX -> recovery
+       |
+       +--> native .so -> Ghidra Headless -> function inventory
+                              |
+                              +--> named functions
+                              +--> generic/unnamed functions
+                              +--> external/thunk functions
+                              +--> JNI candidates
+       |
+       v
+BLCEvidenceGraph -> analysis.json -> BLCGameSecLab
+```
 
 ## Recovery model
 
-```text
-Target
-  -> Artifact fingerprint
-  -> Android/package structure
-  -> JADX decompile
-  -> JADX deobfuscation / supplied mappings
-  -> Identifier recovery profile
-  -> Reversible literal recovery
-  -> High-entropy / protected-content evidence
-  -> EvidenceGraph
-  -> analysis.json
-```
+BLCReverseLab distinguishes:
 
-The recovery layer deliberately distinguishes three cases:
+1. **Obfuscation** — readability can often be improved, but destroyed source names/comments cannot always be recreated exactly.
+2. **Reversible encoding** — representations such as Base64/hex can be normalized automatically when the result is clearly readable.
+3. **Cryptographic/runtime protection** — detected and recorded as evidence; no false claim is made that unknown cryptographic keys can always be reconstructed. Authorized keys, developer mappings, or later authorized runtime plaintext can be attached as evidence.
+4. **Native/stripped code** — Ghidra can recover a useful function-level model even when original symbol names are missing. Generated names remain explicitly marked as generic rather than being presented as original names.
 
-1. **Obfuscation** — names and control flow are made difficult to read. We can often improve readability with decompiler analysis, source metadata, heuristics, mappings, and later cross-version/runtime evidence.
-2. **Reversible encoding** — Base64, hex, and similar representations are not cryptographic secrecy. These can be normalized automatically when the decoded result is clearly readable.
-3. **Cryptographic encryption / runtime-protected values** — BLCReverseLab records where protection exists, but does not pretend an unknown key can always be reconstructed. Authorized keys, developer mappings, or plaintext observed in an authorized runtime session can later be attached as evidence.
-
-There is **no guarantee of recovering the original source code byte-for-byte**. Compilation and obfuscation can permanently remove original variable names, comments, formatting, generic type information, and other source-level detail. The product goal is the most faithful readable behavior model supported by evidence.
-
-## Architecture
-
-```text
-Target
-  -> Fingerprint
-  -> Android structure / tracked-entry fingerprints
-  -> Optional adapters
-       -> JADX
-       -> Recovery
-       -> Ghidra/native analysis (next)
-  -> EvidenceGraph
-  -> analysis.json
-  -> Version Intelligence
-  -> BLCGameSecLab / UI / AI adapters
-```
-
-## BLCGameSecLab integration
-
-BLCReverseLab is the artifact-analysis layer. Its JSON evidence is consumed by **BLCGameSecLab** so authorized security pipelines can reuse fingerprints, detected engines, DEX/native inventory, recovery signals, adapter results, and the evidence graph rather than starting over.
+There is **no guarantee of recovering the original source byte-for-byte**. The goal is the most faithful readable behavior model supported by evidence.
 
 ## Quick start
 
 ```bash
 python -m pip install -e .
 
-# Core static inventory + evidence graph
+# Core inventory
 blc-reverselab analyze app.apk -o app.analysis.json
 
-# Normal JADX decompilation
-blc-reverselab analyze app.apk --jadx --workdir .blc-work -o app.analysis.json
+# Java/Kotlin decompile
+blc-reverselab analyze app.apk --jadx -o app.analysis.json
 
-# Deobfuscation + readable-code recovery
-blc-reverselab analyze app.apk --recover --workdir .blc-work -o app.analysis.json
+# Deobfuscation/readability recovery
+blc-reverselab analyze app.apk --recover -o app.analysis.json
 
-# If you own the original mapping file, use it as high-confidence rename evidence
+# Use an authorized developer mapping when available
 blc-reverselab analyze app.apk --recover --mapping mapping.txt -o app.analysis.json
 
-# Compare two application builds
+# Native analysis (Ghidra must be installed and analyzeHeadless on PATH)
+blc-reverselab analyze app.apk --ghidra -o app.analysis.json
+
+# Combined Android + recovery + native analysis
+blc-reverselab analyze app.apk --recover --ghidra --workdir .blc-work -o app.analysis.json
+
+# Compare builds
 blc-reverselab diff old.analysis.json new.analysis.json -o version-diff.json
 ```
 
-The JADX adapter invokes the locally installed `jadx` CLI. BLCReverseLab does not bundle JADX.
+`--ghidra-max-native` limits how many native libraries from a package are analyzed, and `--ghidra-timeout` controls the per-target analysis timeout.
 
-## Next native/recovery layers
+## Next layers
 
-- Ghidra Headless adapter and native symbol/function inventory.
 - Java/Kotlin -> JNI -> native cross-reference graph.
-- Control-flow complexity and decompiler-failure hotspot indexing.
+- Dynamic JNI registration correlation.
+- Decompiler-failure and control-flow complexity hotspots.
 - Packer/protector fingerprint inventory.
-- Authorized runtime evidence import for values that only become plaintext at runtime.
-- Cross-version semantic matching so renamed/shifted functions can still be correlated.
-- AI-assisted semantic naming backed by EvidenceGraph provenance.
+- Cross-version semantic function matching even when addresses/names move.
+- Authorized runtime evidence import for values only visible at runtime.
+- AI-assisted semantic naming with explicit confidence and EvidenceGraph provenance.
+- Premium desktop graph/workspace UI.
+
+## BLCGameSecLab integration
+
+BLCGameSecLab consumes the machine-readable analysis report so later security stages reuse the same artifact fingerprint, recovery evidence, native function inventory, version intelligence, and provenance graph rather than rediscovering the target.
 
 ## Scope
 
