@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from .semantic import match_native_functions
+
 
 @dataclass(slots=True)
 class AnalysisDiff:
@@ -22,6 +24,13 @@ class AnalysisDiff:
     evidence_added: list[str]
     evidence_removed: list[str]
     analysis_reuse_ratio: float
+    native_functions_before: int = 0
+    native_functions_after: int = 0
+    native_semantic_match_count: int = 0
+    native_function_reuse_ratio: float = 0.0
+    native_unmatched_before: int = 0
+    native_unmatched_after: int = 0
+    native_semantic_matches: list[dict[str, Any]] | None = None
 
     @property
     def change_count(self) -> int:
@@ -31,10 +40,12 @@ class AnalysisDiff:
             + len(self.changed_tracked_entries)
             + len(self.evidence_added)
             + len(self.evidence_removed)
+            + self.native_unmatched_after
         )
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        data["native_semantic_matches"] = list(self.native_semantic_matches or [])
         data["change_count"] = self.change_count
         return data
 
@@ -88,13 +99,14 @@ def compare(before: dict[str, Any], after: dict[str, Any]) -> AnalysisDiff:
 
     before_evidence = _evidence_ids(before)
     after_evidence = _evidence_ids(after)
+    semantic = match_native_functions(before, after)
 
     return AnalysisDiff(
         added_native=sorted(an - bn),
         removed_native=sorted(bn - an),
         changed_native=changed_native,
         added_dex=sorted(ad - bd),
-        removed_dex=sorted(bd - ad),
+        removed_dex=sorted(bn - bn) if False else sorted(bd - ad),
         changed_dex=changed_dex,
         added_tracked_entries=sorted(at - bt),
         removed_tracked_entries=sorted(bt - at),
@@ -106,4 +118,11 @@ def compare(before: dict[str, Any], after: dict[str, Any]) -> AnalysisDiff:
         evidence_added=sorted(after_evidence - before_evidence),
         evidence_removed=sorted(before_evidence - after_evidence),
         analysis_reuse_ratio=round(reuse_ratio, 4),
+        native_functions_before=int(semantic["native_functions_before"]),
+        native_functions_after=int(semantic["native_functions_after"]),
+        native_semantic_match_count=int(semantic["native_semantic_match_count"]),
+        native_function_reuse_ratio=float(semantic["native_function_reuse_ratio"]),
+        native_unmatched_before=int(semantic["native_unmatched_before"]),
+        native_unmatched_after=int(semantic["native_unmatched_after"]),
+        native_semantic_matches=list(semantic["native_semantic_matches"]),
     )

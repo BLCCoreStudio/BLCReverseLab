@@ -8,6 +8,17 @@ from pathlib import Path
 from typing import Any
 
 
+def _shape_id(
+    body_size: int,
+    instruction_count: int,
+    parameter_count: int,
+    external: bool,
+    thunk: bool,
+) -> str:
+    raw = f"{body_size}:{instruction_count}:{parameter_count}:{int(external)}:{int(thunk)}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
 @dataclass(slots=True)
 class GhidraFunction:
     address: str
@@ -15,6 +26,8 @@ class GhidraFunction:
     external: bool
     thunk: bool
     body_size: int
+    instruction_count: int = 0
+    parameter_count: int = 0
 
     @property
     def generic_name(self) -> bool:
@@ -25,10 +38,21 @@ class GhidraFunction:
     def jni_candidate(self) -> bool:
         return self.name.startswith("Java_") or self.name in {"JNI_OnLoad", "JNI_OnUnload"}
 
+    @property
+    def shape_id(self) -> str:
+        return _shape_id(
+            self.body_size,
+            self.instruction_count,
+            self.parameter_count,
+            self.external,
+            self.thunk,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["generic_name"] = self.generic_name
         payload["jni_candidate"] = self.jni_candidate
+        payload["shape_id"] = self.shape_id
         return payload
 
 
@@ -47,38 +71,61 @@ class GhidraResult:
     jni_candidate_count: int = 0
     jni_candidates: list[str] = field(default_factory=list)
     function_sample: list[dict[str, Any]] = field(default_factory=list)
+    function_fingerprints: list[dict[str, Any]] = field(default_factory=list)
     stderr_tail: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def parse_function_inventory(path: Path, *, sample_limit: int = 200) -> tuple[list[GhidraFunction], list[dict[str, Any]]]:
+def parse_function_inventory(
+    path: Path,
+    *,
+    sample_limit: int = 200,
+    fingerprint_limit: int = 5000,
+) -> tuple[list[GhidraFunction], list[dict[str, Any]], list[dict[str, Any]]]:
     functions: list[GhidraFunction] = []
     sample: list[dict[str, Any]] = []
+    fingerprints: list[dict[str, Any]] = []
     if not path.is_file():
-        return functions, sample
+        return functions, sample, fingerprints
 
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         parts = line.split("\t")
-        if len(parts) != 5:
+        if len(parts) not in {5, 7}:
             continue
-        address, name, external, thunk, body_size = parts
+        address, name, external, thunk, body_size = parts[:5]
         try:
             size = int(body_size)
         except ValueError:
             size = 0
+        instruction_count = 0
+        parameter_count = 0
+        if len(parts) == 7:
+            try:
+                instruction_count = int(parts[5])
+            except ValueError:
+                pass
+            try:
+                parameter_count = int(parts[6])
+            except ValueError:
+                pass
         function = GhidraFunction(
             address=address,
             name=name,
             external=external.lower() == "true",
             thunk=thunk.lower() == "true",
             body_size=size,
+            instruction_count=instruction_count,
+            parameter_count=parameter_count,
         )
         functions.append(function)
+        payload = function.to_dict()
         if len(sample) < sample_limit:
-            sample.append(function.to_dict())
-    return functions, sample
+            sample.append(payload)
+        if not function.external and len(fingerprints) < fingerprint_limit:
+            fingerprints.append(payload)
+    return functions, sample, fingerprints
 
 
 @dataclass(slots=True)
@@ -86,6 +133,7 @@ class GhidraAdapter:
     binary: str | None = None
     timeout_seconds: int = 300
     function_sample_limit: int = 200
+    function_fingerprint_limit: int = 5000
 
     def resolve(self) -> str | None:
         return self.binary or shutil.which("analyzeHeadless")
@@ -152,7 +200,11 @@ class GhidraAdapter:
                 stderr_tail=stderr[-3000:],
             )
 
-        functions, sample = parse_function_inventory(inventory_path, sample_limit=self.function_sample_limit)
+        functions, sample, fingerprints = parse_function_inventory(
+            inventory_path,
+            sample_limit=self.function_sample_limit,
+            fingerprint_limit=self.function_fingerprint_limit,
+        )
         jni = sorted({item.name for item in functions if item.jni_candidate})
         status = "completed" if completed.returncode == 0 and inventory_path.is_file() else "completed-with-errors"
         return GhidraResult(
@@ -169,5 +221,6 @@ class GhidraAdapter:
             jni_candidate_count=len(jni),
             jni_candidates=jni[:100],
             function_sample=sample,
+            function_fingerprints=fingerprints,
             stderr_tail=(completed.stderr or "")[-3000:],
         )
