@@ -10,6 +10,7 @@ from typing import Protocol
 
 from .adapters import JadxAdapter
 from .models import AnalysisContext, Evidence
+from .recovery import RecoveryAnalyzer
 
 
 class Step(Protocol):
@@ -161,7 +162,11 @@ class AndroidArchiveStep:
                 for name in tracked_entries
                 if (
                     engine.startswith("unity")
-                    and ("libunity.so" in name.lower() or "libil2cpp.so" in name.lower() or "global-metadata.dat" in name.lower())
+                    and (
+                        "libunity.so" in name.lower()
+                        or "libil2cpp.so" in name.lower()
+                        or "global-metadata.dat" in name.lower()
+                    )
                 )
                 or (engine == "unreal" and ("libue4.so" in name.lower() or "libunreal.so" in name.lower()))
             ]
@@ -203,13 +208,19 @@ class ToolReadinessStep:
 class JadxStep:
     output_root: Path
     timeout_seconds: int = 180
+    deobfuscate: bool = False
+    mappings_path: Path | None = None
     name: str = "jadx"
 
     def run(self, ctx: AnalysisContext) -> None:
         if ctx.file_type not in {"apk", "aab", "xapk", "dex"}:
             return
         destination = self.output_root / ctx.sha256[:16]
-        result = JadxAdapter(timeout_seconds=self.timeout_seconds).analyze(ctx.target, destination)
+        result = JadxAdapter(
+            timeout_seconds=self.timeout_seconds,
+            deobfuscate=self.deobfuscate,
+            mappings_path=self.mappings_path,
+        ).analyze(ctx.target, destination)
         ctx.facts["jadx"] = result.to_dict()
         existing_ids = {item.id for item in ctx.evidence}
         related = ["ev:fingerprint"]
@@ -230,9 +241,53 @@ class JadxStep:
                     "java_file_count": result.java_file_count,
                     "resource_file_count": result.resource_file_count,
                     "output_dir": result.output_dir,
+                    "deobfuscation_requested": result.deobfuscation_requested,
+                    "mappings_path": result.mappings_path,
                 },
             )
         )
+
+
+@dataclass(slots=True)
+class RecoveryStep:
+    name: str = "recovery"
+
+    def run(self, ctx: AnalysisContext) -> None:
+        jadx = dict(ctx.facts.get("jadx") or {})
+        report = RecoveryAnalyzer().analyze(jadx.get("output_dir"))
+        ctx.facts["recovery"] = report.to_dict()
+        ctx.add(
+            Evidence(
+                id="ev:recovery",
+                kind="recovery-profile",
+                summary=f"Recovery pipeline status: {report.status}",
+                source=self.name,
+                related=["ev:jadx"],
+                confidence=0.9 if report.status == "completed" else 1.0,
+                data={
+                    "status": report.status,
+                    "obfuscation_score": report.obfuscation_score,
+                    "suspicious_identifier_count": report.suspicious_identifier_count,
+                    "encoded_literal_candidates": report.encoded_literal_candidates,
+                    "recovered_literal_count": report.recovered_literal_count,
+                    "high_entropy_literal_count": report.high_entropy_literal_count,
+                    "capabilities": report.capabilities,
+                },
+            )
+        )
+
+        for index, item in enumerate(report.recovered_literals):
+            ctx.add(
+                Evidence(
+                    id=f"ev:recovered-literal:{index}",
+                    kind="recovered-literal",
+                    summary=f"Recovered reversible {item.encoding} literal",
+                    source=self.name,
+                    related=["ev:recovery"],
+                    confidence=0.98,
+                    data=item.to_dict(),
+                )
+            )
 
 
 class Pipeline:
@@ -241,14 +296,26 @@ class Pipeline:
         steps: list[Step] | None = None,
         *,
         enable_jadx: bool = False,
+        enable_recovery: bool = False,
+        mappings_path: str | Path | None = None,
         workdir: str | Path = ".blc-reverselab",
     ) -> None:
         if steps is not None:
             self.steps = steps
             return
+
+        mapping = Path(mappings_path).expanduser() if mappings_path else None
         built: list[Step] = [FingerprintStep(), AndroidArchiveStep(), ToolReadinessStep()]
-        if enable_jadx:
-            built.append(JadxStep(Path(workdir)))
+        if enable_jadx or enable_recovery:
+            built.append(
+                JadxStep(
+                    Path(workdir),
+                    deobfuscate=enable_recovery,
+                    mappings_path=mapping,
+                )
+            )
+        if enable_recovery:
+            built.append(RecoveryStep())
         self.steps = built
 
     def analyze(self, target: str | Path) -> AnalysisContext:

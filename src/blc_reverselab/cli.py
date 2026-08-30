@@ -25,6 +25,16 @@ def main() -> None:
         help="Run the optional JADX adapter and index its decompilation output",
     )
     analyze.add_argument(
+        "--recover",
+        action="store_true",
+        help="Enable JADX deobfuscation plus the readable-code recovery profiler",
+    )
+    analyze.add_argument(
+        "--mapping",
+        type=Path,
+        help="Optional developer-supplied rename mapping (for example ProGuard/R8 mapping.txt)",
+    )
+    analyze.add_argument(
         "--workdir",
         default=".blc-reverselab",
         help="Directory used by optional external-analysis adapters",
@@ -37,7 +47,12 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.command == "analyze":
-        pipeline = Pipeline(enable_jadx=args.jadx, workdir=args.workdir)
+        pipeline = Pipeline(
+            enable_jadx=args.jadx or args.recover,
+            enable_recovery=args.recover,
+            mappings_path=args.mapping,
+            workdir=args.workdir,
+        )
         ctx = pipeline.analyze(args.target)
         out = Pipeline.save(ctx, args.output)
         print(json.dumps(ctx.to_dict(), indent=2, sort_keys=True))
