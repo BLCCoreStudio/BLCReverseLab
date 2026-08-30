@@ -2,48 +2,55 @@
 
 Evidence-first reverse engineering workspace for **authorized analysis, debugging, malware research, CTFs, interoperability, and application security**.
 
-## v0.1 goals
+## v0.2 alpha milestone
 
-- Detect APK/AAB/APKS/XAPK/DEX/SO/EXE/DLL artifacts.
-- Build a persistent analysis context so every stage reuses earlier findings.
-- Map Android package structure and identify common game-engine fingerprints.
-- Record every result as evidence with provenance and confidence.
-- Compare analysis snapshots across application versions.
-- Discover optional JADX/Ghidra adapters without making them hard dependencies.
+BLCReverseLab now has a persistent analysis contract instead of being only a file detector:
+
+- APK/AAB/APKS/XAPK/DEX/SO/EXE/DLL artifact fingerprinting.
+- Android package mapping with stable fingerprints for DEX, native libraries, manifests, resource tables, and Unity metadata.
+- `BLCEvidenceGraph`: evidence nodes, provenance links, confidence, graph statistics, queries, and unresolved-link checks.
+- Build-to-build version intelligence that detects **changed files even when their names stay the same**.
+- Analysis reuse ratio for incremental follow-up work.
+- Optional real JADX CLI adapter (`--jadx`) that records decompilation status and output counts as evidence.
+- Optional JADX/Ghidra readiness discovery without making external tools hard dependencies.
+- Machine-readable schema marker: `blc.reverselab.analysis/v1`.
 
 ## Architecture
 
-`Target -> Pipeline -> AnalysisContext -> EvidenceGraph -> Version Diff -> UI/AI adapters`
+```text
+Target
+  -> Fingerprint
+  -> Android structure / tracked-entry fingerprints
+  -> EvidenceGraph
+  -> Optional adapters (JADX now, more later)
+  -> analysis.json
+  -> Version Intelligence
+  -> BLCGameSecLab / UI / AI adapters
+```
 
-The core deliberately separates evidence collection from tool-specific adapters. Future JADX, Ghidra, runtime-observation and visualization integrations feed the same evidence model.
+Every stage contributes evidence to the same context. Evidence records retain their source, confidence, data, and relationships so downstream tooling does not have to rediscover why a conclusion was reached.
 
 ## BLCGameSecLab integration
 
-BLCReverseLab is the artifact-analysis layer. Its JSON evidence can be consumed by **BLCGameSecLab** so an authorized game-security pipeline can reuse the exact target fingerprint, detected engine, DEX/native inventory, tool-readiness state, and upstream evidence instead of starting over.
-
-```text
-Target artifact
-    |
-    v
-BLCReverseLab
-    |
-    | analysis.json
-    v
-BLCGameSecLab
-    |
-    +--> trust model
-    +--> security regression
-    +--> findings / remediation / retest
-```
+BLCReverseLab is the artifact-analysis layer. Its JSON evidence can be consumed by **BLCGameSecLab** so an authorized game-security pipeline can reuse the exact target fingerprint, detected engine, DEX/native inventory, tracked-entry fingerprints, graph, adapter results, and upstream evidence instead of starting over.
 
 ## Quick start
 
 ```bash
 python -m pip install -e .
+
+# Core static inventory + evidence graph
 blc-reverselab analyze app.apk -o app.analysis.json
-blc-reverselab diff old.analysis.json new.analysis.json
+
+# Also run JADX when it is installed
+blc-reverselab analyze app.apk --jadx --workdir .blc-work -o app.analysis.json
+
+# Compare two application builds and save reusable version intelligence
+blc-reverselab diff old.analysis.json new.analysis.json -o version-diff.json
 ```
+
+The JADX adapter invokes the locally installed `jadx` CLI using its documented `--output-dir` interface. BLCReverseLab does not bundle JADX.
 
 ## Scope
 
-BLCReverseLab is not intended to provide anti-cheat bypass, stealth, integrity-bypass, credential theft, unauthorized access, or online cheating automation.
+BLCReverseLab is for authorized reverse engineering and defensive research. It is not intended to provide anti-cheat bypass, stealth, integrity-bypass, credential theft, unauthorized access, or online-cheating automation.
