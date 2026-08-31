@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 import subprocess
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -196,16 +197,16 @@ class GhidraAdapter:
         if not binary:
             return GhidraResult(available=False, status="unavailable", target=str(target))
 
-        # Ghidra rejects local project paths containing a path element that starts
-        # with a dot (for example `.blc-reverselab`). Resolving the adapter root
-        # first gives Headless an absolute project location whose elements are
-        # valid even when the user intentionally chose a hidden work directory.
         output_root = output_root.expanduser().resolve()
         target = target.expanduser().resolve()
-
         digest = hashlib.sha256(str(target).encode("utf-8")).hexdigest()[:12]
-        project_dir = output_root / "projects"
-        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ghidra rejects project locations containing any path component whose
+        # name begins with a dot. ReverseLab intentionally defaults to hidden
+        # work directories, so ephemeral Ghidra project state lives in a clean
+        # system-temp directory. Durable inventories and diagnostics still stay
+        # under the user's requested output_root.
+        project_dir = Path(tempfile.mkdtemp(prefix=f"blc-reverselab-ghidra-{digest}-")).resolve()
         inventory_dir = output_root / "inventories"
         inventory_dir.mkdir(parents=True, exist_ok=True)
         log_dir = output_root / "logs"
@@ -235,7 +236,7 @@ class GhidraAdapter:
         except subprocess.TimeoutExpired as exc:
             stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
             stdout = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-            return GhidraResult(
+            result = GhidraResult(
                 available=True,
                 status="timeout",
                 target=str(target),
@@ -246,6 +247,8 @@ class GhidraAdapter:
                 application_log_tail=_tail(application_log),
                 script_log_tail=_tail(script_log),
             )
+            shutil.rmtree(project_dir, ignore_errors=True)
+            return result
 
         functions, sample, fingerprints = parse_function_inventory(
             inventory_path,
@@ -254,7 +257,7 @@ class GhidraAdapter:
         )
         jni = sorted({item.name for item in functions if item.jni_candidate})
         status = "completed" if completed.returncode == 0 and inventory_path.is_file() else "completed-with-errors"
-        return GhidraResult(
+        result = GhidraResult(
             available=True,
             status=status,
             target=str(target),
@@ -274,3 +277,5 @@ class GhidraAdapter:
             application_log_tail=_tail(application_log),
             script_log_tail=_tail(script_log),
         )
+        shutil.rmtree(project_dir, ignore_errors=True)
+        return result
