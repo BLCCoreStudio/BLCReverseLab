@@ -2,9 +2,9 @@
 
 Evidence-first reverse-engineering workspace for **authorized application security, debugging, malware research, interoperability and CTF/lab analysis**.
 
-## 1.0.0-rc.1
+## 1.0.0
 
-The core workflow is now release-candidate complete:
+The core workflow is stable and release-ready:
 
 - APK/AAB/APKS/XAPK/DEX/SO/EXE/DLL artifact fingerprinting and Android structure inventory.
 - JADX decompilation, recovery/deobfuscation, managed class/method indexing and static endpoint discovery.
@@ -16,7 +16,7 @@ The core workflow is now release-candidate complete:
 - `BLCEvidenceGraph`, authorized runtime evidence import and persistent project workspaces.
 - Universal Search across managed, native, JNI, endpoint, recovered-literal and evidence layers.
 - Self-contained HTML reports, portable `.blc.zip` bundles and a local read-only workspace IDE.
-- Python 3.11–3.13 CI, package smoke tests, real JADX/Ghidra integration tests and cross-repo validation with BLCGameSecLab.
+- Python 3.11–3.13 CI, Linux/Windows/macOS smoke tests, real JADX/Ghidra integration tests, full-stack synthetic APK validation and cross-repo validation with BLCGameSecLab.
 
 ## Quick start
 
@@ -56,4 +56,4 @@ JADX and Ghidra are optional external integrations. They are not vendored into t
 
 Use only on software you own, are explicitly authorized to assess, or are permitted to analyze in a lab/CTF/research context. BLCReverseLab does not provide anti-cheat bypass, stealth/evasion, credential theft, signature/integrity bypass automation or online-cheating automation. See `SECURITY.md`.
 
-See `CHANGELOG.md` and `RELEASE_CHECKLIST.md` for the RC status.
+See `CHANGELOG.md`, `ARCHITECTURE.md` and `RELEASE_CHECKLIST.md` for implementation and release details.

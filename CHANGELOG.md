@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 — 2026-08-31
+
+### Stable release
+- Promoted the RC core to 1.0.0 after the final Python 3.11–3.13, Linux/Windows/macOS, packaging, real JADX, real Ghidra, full-stack synthetic APK and ReverseLab → GameSecLab E2E gates passed.
+- Marked the package as Production/Stable.
+- Hardened release automation so a matching `v*` tag validates the package version, builds wheel/sdist, generates SHA-256 checksums and publishes the artifacts to a GitHub Release.
+- No breaking analysis-contract changes were introduced between `1.0.0-rc.1` and `1.0.0`.
+
 ## 1.0.0-rc.1 — 2026-08-31
 
 ### Added
