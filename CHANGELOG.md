@@ -5,11 +5,15 @@
 ### Added
 - Premium local **Investigation Studio** with a dedicated `blc-reverselab studio` command.
 - One-screen Evidence Analyst, cross-layer managed/JNI/native/network/recovery/evidence graph, Universal Search and raw-fact inspection.
-- Read-only Studio HTTP API for grounded analyst, graph and search queries.
-- Regression coverage for Studio rendering and HTTP analyst/graph/search surfaces.
+- Persistent **Build Timeline** for navigating saved workspace analyses.
+- Cross-layer **Version Intelligence** for managed classes/methods, endpoints, JNI bridges, DEX/native fingerprints, native semantic reuse, protection and recovery changes.
+- Evidence-backed re-analysis focus derived from changed build surfaces.
+- Read-only Studio HTTP APIs for grounded analyst, graph, search and build-to-build version-intelligence queries.
+- Regression coverage for Studio rendering, analyst/graph/search APIs and version-comparison behavior.
 
 ### Guarantees
 - Studio is read-only and binds to `127.0.0.1` by default.
+- Version Intelligence reports only differences represented by the two saved analyses; missing analyzer output is not treated as proof that a surface is absent.
 - Studio reuses the existing evidence contracts; it does not invent missing source details or silently execute plugins.
 
 ## 1.1.0 — 2026-08-31
