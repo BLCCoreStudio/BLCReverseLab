@@ -4,10 +4,13 @@ import argparse
 import json
 from pathlib import Path
 
+from .analyst import ask_report
 from .bundle import create_bundle
 from .diff import compare
 from .doctor import doctor
+from .explorer import build_analysis_graph, graph_to_dot
 from .pipeline import Pipeline
+from .plugins import discover_plugins, run_installed_plugin
 from .profiles import build_pipeline
 from .query import search_report
 from .report import save_analysis_html
@@ -18,6 +21,16 @@ from .workspace import add_analysis, init_workspace, read_workspace
 
 def _load(path: str | Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def _write_or_print(payload: str, output: str | Path | None) -> None:
+    if output:
+        path = Path(output)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(payload, encoding="utf-8")
+        print(f"Saved: {path}")
+    else:
+        print(payload, end="" if payload.endswith("\n") else "\n")
 
 
 def main() -> None:
@@ -55,6 +68,26 @@ def main() -> None:
     search.add_argument("analysis")
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=100)
+
+    ask = sub.add_parser("ask", help="Answer from report evidence without inventing missing facts")
+    ask.add_argument("analysis")
+    ask.add_argument("question")
+    ask.add_argument("--limit", type=int, default=8)
+    ask.add_argument("-o", "--output")
+
+    graph = sub.add_parser("graph", help="Build a cross-layer managed/JNI/native/evidence graph")
+    graph.add_argument("analysis")
+    graph.add_argument("--format", choices=("json", "dot"), default="json")
+    graph.add_argument("-o", "--output")
+
+    plugins = sub.add_parser("plugins", help="Discover or explicitly run trusted ReverseLab plugins")
+    plugin_sub = plugins.add_subparsers(dest="plugin_command", required=True)
+    plugin_sub.add_parser("list", help="List installed plugin metadata without importing plugin code")
+    plugin_run = plugin_sub.add_parser("run", help="Run one explicitly named installed plugin")
+    plugin_run.add_argument("name")
+    plugin_run.add_argument("analysis")
+    plugin_run.add_argument("--config", type=Path)
+    plugin_run.add_argument("-o", "--output")
 
     sub.add_parser("doctor", help="Inspect optional analysis-tool readiness")
 
@@ -125,6 +158,26 @@ def main() -> None:
 
     if args.command == "search":
         print(json.dumps(search_report(_load(args.analysis), args.query, limit=max(1, args.limit)), indent=2, sort_keys=True))
+        return
+
+    if args.command == "ask":
+        payload = json.dumps(ask_report(_load(args.analysis), args.question, limit=max(1, args.limit)), indent=2, sort_keys=True) + "\n"
+        _write_or_print(payload, args.output)
+        return
+
+    if args.command == "graph":
+        payload = build_analysis_graph(_load(args.analysis))
+        rendered = graph_to_dot(payload) if args.format == "dot" else json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        _write_or_print(rendered, args.output)
+        return
+
+    if args.command == "plugins":
+        if args.plugin_command == "list":
+            print(json.dumps([item.to_dict() for item in discover_plugins()], indent=2, sort_keys=True))
+            return
+        config = _load(args.config) if args.config else {}
+        payload = json.dumps(run_installed_plugin(args.name, _load(args.analysis), config), indent=2, sort_keys=True) + "\n"
+        _write_or_print(payload, args.output)
         return
 
     if args.command == "doctor":

@@ -2,9 +2,16 @@
 
 Evidence-first reverse-engineering workspace for **authorized application security, debugging, malware research, interoperability and CTF/lab analysis**.
 
-## 1.0.0
+## 1.1.0
 
-The core workflow is stable and release-ready:
+1.1 keeps the stable 1.0 analysis core and adds a higher-level investigation layer:
+
+- **Evidence Analyst (`ask`)**: deterministic, offline answers grounded only in the supplied analysis. It returns confidence, supporting hits and covered layers instead of inventing missing source details.
+- **Cross-layer Graph Explorer (`graph`)**: exports a navigable managed → JNI → native plus network/recovery/evidence graph as JSON or Graphviz DOT.
+- **Plugin SDK (`plugins`)**: discovers plugin metadata without importing code and only executes an installed plugin when the user explicitly names it. Plugin outputs are isolated behind a versioned result contract.
+- No paid API is required. Optional model-backed analyst plugins can build on the same evidence contract without replacing provenance.
+
+### Stable analysis core
 
 - APK/AAB/APKS/XAPK/DEX/SO/EXE/DLL artifact fingerprinting and Android structure inventory.
 - JADX decompilation, recovery/deobfuscation, managed class/method indexing and static endpoint discovery.
@@ -14,8 +21,7 @@ The core workflow is stable and release-ready:
 - Defensive protection/packer/obfuscation/stripping profiles and decompiler hotspots.
 - Build-to-build diff plus native semantic reuse matching.
 - `BLCEvidenceGraph`, authorized runtime evidence import and persistent project workspaces.
-- Universal Search across managed, native, JNI, endpoint, recovered-literal and evidence layers.
-- Self-contained HTML reports, portable `.blc.zip` bundles and a local read-only workspace IDE.
+- Universal Search, self-contained HTML reports, portable `.blc.zip` bundles and a local read-only workspace IDE.
 - Python 3.11–3.13 CI, Linux/Windows/macOS smoke tests, real JADX/Ghidra integration tests, full-stack synthetic APK validation and cross-repo validation with BLCGameSecLab.
 
 ## Quick start
@@ -23,34 +29,39 @@ The core workflow is stable and release-ready:
 ```bash
 python -m pip install -e .
 
-# Check optional external tools
 blc-reverselab doctor
-
-# Deep analysis
 blc-reverselab analyze app.apk --deep --workdir .blc-work --html-report report.html -o analysis.json
 
-# Persistent project history
+# Evidence-backed investigation
+blc-reverselab search analysis.json "inventory"
+blc-reverselab ask analysis.json "where is inventory handled?"
+blc-reverselab graph analysis.json --format json -o graph.json
+blc-reverselab graph analysis.json --format dot -o graph.dot
+
+# Explicit, trusted plugin execution
+blc-reverselab plugins list
+blc-reverselab plugins run my-plugin analysis.json --config plugin-config.json -o plugin-result.json
+
+# Version intelligence and workspace history
+blc-reverselab diff old.analysis.json new.analysis.json -o version-diff.json
 blc-reverselab workspace init ./my-lab --name "My App Lab"
 blc-reverselab workspace add ./my-lab analysis.json
 blc-reverselab serve ./my-lab --open
 
-# Search and version intelligence
-blc-reverselab search analysis.json "inventory"
-blc-reverselab diff old.analysis.json new.analysis.json -o version-diff.json
-
-# Portable review package
 blc-reverselab bundle analysis.json --version-diff version-diff.json -o review.blc.zip
 ```
 
-## Analysis contract
+## Evidence contract
 
 ReverseLab keeps uncertainty explicit. Obfuscation or symbol stripping can permanently destroy original source names/comments, so generated or inferred names are never presented as recovered originals. Cryptographic content is not claimed to be decrypted without authorized keys or plaintext evidence.
+
+`ask` is evidence retrieval and synthesis, not a claim that the tool recovered information absent from the report. Third-party plugins execute as local Python code with the user's privileges, so install and run only plugins you trust.
 
 The local IDE is read-only and binds to `127.0.0.1` by default.
 
 ## Optional tools
 
-JADX and Ghidra are optional external integrations. They are not vendored into the Python package. The repository's integration workflow pins and checksum-verifies known-good releases before exercising real DEX and ELF fixtures.
+JADX and Ghidra are optional external integrations. They are not vendored into the Python package. CI pins and checksum-verifies known-good releases before exercising real DEX and ELF fixtures.
 
 ## Scope
 

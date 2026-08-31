@@ -1,12 +1,26 @@
 # Changelog
 
+## 1.1.0 — 2026-08-31
+
+### Added
+- Evidence-backed offline Analyst with `blc-reverselab ask`, confidence, supporting hits and explicit insufficient-evidence behavior.
+- Cross-layer Graph Explorer with managed class/method, JNI bridge, native function, network, recovery and EvidenceGraph nodes.
+- JSON and Graphviz DOT graph export.
+- Versioned plugin SDK using the `blc_reverselab.plugins` Python entry-point group.
+- Safe plugin discovery that does not import plugin code and explicit-only plugin execution with isolated result contracts.
+
+### Guarantees
+- Analyst answers are derived only from the supplied report and never claim missing source names, plaintext or runtime behavior as facts.
+- Plugin execution remains opt-in; third-party plugins are treated as trusted local code and are never auto-executed during analysis.
+- Existing `blc.reverselab.analysis/v1` report compatibility is preserved.
+
 ## 1.0.0 — 2026-08-31
 
 ### Stable release
-- Promoted the RC core to 1.0.0 after the final Python 3.11–3.13, Linux/Windows/macOS, packaging, real JADX, real Ghidra, full-stack synthetic APK and ReverseLab → GameSecLab E2E gates passed.
+- Promoted the RC core to 1.0.0 after Python 3.11–3.13, Linux/Windows/macOS, packaging, real JADX, real Ghidra, full-stack synthetic APK and ReverseLab → GameSecLab E2E gates passed.
 - Marked the package as Production/Stable.
-- Hardened release automation so a matching `v*` tag validates the package version, builds wheel/sdist, generates SHA-256 checksums and publishes the artifacts to a GitHub Release.
-- No breaking analysis-contract changes were introduced between `1.0.0-rc.1` and `1.0.0`.
+- Hardened release automation with package/tag validation, wheel/sdist builds and SHA-256 checksums.
+- Published `v1.0.0` with wheel, source distribution and `SHA256SUMS`.
 
 ## 1.0.0-rc.1 — 2026-08-31
 
