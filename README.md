@@ -8,6 +8,9 @@ The current `main` branch adds **Investigation Studio**, a premium local read-on
 
 - Evidence Analyst and its supporting evidence are visible in the same workspace.
 - Managed/JNI/native/network/recovery/evidence nodes are rendered as a cross-layer graph.
+- **Build Timeline** lets you move between saved analyses in a persistent workspace.
+- **Version Intelligence** compares a baseline with the current build across managed classes/methods, endpoints, JNI bridges, native semantic reuse, DEX/native fingerprints, protection and recovery signals.
+- Version Intelligence derives an evidence-backed **re-analysis focus** so changed surfaces are prioritized without treating missing analyzer output as proof of absence.
 - Universal Search and raw proven facts remain available beside the graph.
 - Studio binds to `127.0.0.1` by default and does not add a paid API dependency.
 
@@ -60,10 +63,11 @@ blc-reverselab plugins run my-plugin analysis.json --config plugin-config.json -
 # Version intelligence and workspace history
 blc-reverselab diff old.analysis.json new.analysis.json -o version-diff.json
 blc-reverselab workspace init ./my-lab --name "My App Lab"
-blc-reverselab workspace add ./my-lab analysis.json
+blc-reverselab workspace add ./my-lab old.analysis.json
+blc-reverselab workspace add ./my-lab new.analysis.json
 blc-reverselab serve ./my-lab --open
 
-# Current main: premium local Investigation Studio
+# Current main: premium Studio with timeline + Version Intelligence
 blc-reverselab studio ./my-lab --open
 
 blc-reverselab bundle analysis.json --version-diff version-diff.json -o review.blc.zip
