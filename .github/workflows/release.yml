@@ -1,4 +1,5 @@
 name: Release Build
+
 on:
   workflow_dispatch:
   push:
@@ -13,42 +14,100 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate release tag
-        if: startsWith(github.ref, 'refs/tags/')
+
+      - name: Determine release metadata
+        id: meta
         shell: bash
         run: |
           python - <<'PY'
-          import os, tomllib
-          version=tomllib.load(open('pyproject.toml','rb'))['project']['version']
-          tag=os.environ['GITHUB_REF_NAME']
-          accepted={'v'+version, 'v'+version.replace('rc','-rc.')}
-          assert tag in accepted, f'tag {tag!r} does not match package version {version!r}'
+          import os
+          import re
+          import tomllib
+
+          version = tomllib.load(open('pyproject.toml', 'rb'))['project']['version']
+          match = re.fullmatch(r'(\d+\.\d+\.\d+)(?:rc(\d+))?', version)
+          if not match:
+              raise SystemExit(f'unsupported project version format: {version!r}')
+
+          base, rc = match.groups()
+          canonical_tag = f'v{base}' if rc is None else f'v{base}-rc.{rc}'
+          event_tag = os.environ.get('GITHUB_REF_NAME', '') if os.environ.get('GITHUB_REF_TYPE') == 'tag' else ''
+
+          if event_tag:
+              accepted = {canonical_tag, 'v' + version}
+              if event_tag not in accepted:
+                  raise SystemExit(
+                      f'tag {event_tag!r} does not match package version {version!r}; '
+                      f'expected one of {sorted(accepted)!r}'
+                  )
+              release_tag = event_tag
+          else:
+              release_tag = canonical_tag
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'version={version}\n')
+              output.write(f'tag={release_tag}\n')
+              output.write(f'prerelease={str(rc is not None).lower()}\n')
           PY
+
       - run: python -m pip install -U pip pytest build
       - run: python -m pip install -e .
       - run: pytest -q
       - run: python -m build
       - run: python -m pip install --force-reinstall dist/*.whl
       - run: blc-reverselab --help
+
       - name: Generate SHA-256 checksums
         shell: bash
         run: sha256sum dist/* > dist/SHA256SUMS
+
       - uses: actions/upload-artifact@v4
         with:
-          name: BLCReverseLab-python-package
+          name: BLCReverseLab-${{ steps.meta.outputs.tag }}
           path: dist/*
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+
+      - name: Create release tag for manual runs
+        if: github.event_name == 'workflow_dispatch'
         env:
-          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
         shell: bash
         run: |
-          extra=""
-          if [[ "$GITHUB_REF_NAME" == *"-rc."* ]]; then extra="--prerelease"; fi
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            $extra
+          remote_sha="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | awk '{print $1}')"
+          if [[ -n "$remote_sha" && "$remote_sha" != "$GITHUB_SHA" ]]; then
+            echo "Tag $RELEASE_TAG already exists at $remote_sha, not $GITHUB_SHA" >&2
+            exit 1
+          fi
+          if [[ -z "$remote_sha" ]]; then
+            git tag "$RELEASE_TAG" "$GITHUB_SHA"
+            git push origin "$RELEASE_TAG"
+          fi
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+            exit 0
+          fi
+
+          args=(
+            "$RELEASE_TAG"
+            dist/*
+            --verify-tag
+            --title "$RELEASE_TAG"
+            --generate-notes
+          )
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"
