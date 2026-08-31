@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from blc_reverselab.adapters.ghidra import GhidraAdapter, parse_function_inventory
 
@@ -54,3 +55,29 @@ def test_ghidra_unavailable_is_nonfatal(tmp_path: Path, monkeypatch):
     result = GhidraAdapter().analyze(target, tmp_path / "out")
     assert result.available is False
     assert result.status == "unavailable"
+
+
+def test_hidden_relative_workdir_is_normalized_before_headless(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = Path("libfixture.so")
+    target.write_bytes(b"binary")
+
+    def fake_run(command, **kwargs):
+        project_dir = Path(command[1])
+        imported = Path(command[command.index("-import") + 1])
+        inventory = Path(command[command.index("-postScript") + 2])
+        assert project_dir.is_absolute()
+        assert imported.is_absolute()
+        assert inventory.is_absolute()
+        inventory.parent.mkdir(parents=True, exist_ok=True)
+        inventory.write_text(
+            "001000\tJava_com_blc_fixture_Sample_nativeTick\tfalse\tfalse\t42\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("blc_reverselab.adapters.ghidra.subprocess.run", fake_run)
+    result = GhidraAdapter(binary="/fake/analyzeHeadless").analyze(target, Path(".hidden-work"))
+    assert result.status == "completed"
+    assert result.function_count == 1
+    assert result.jni_candidates == ["Java_com_blc_fixture_Sample_nativeTick"]
