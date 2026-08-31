@@ -16,6 +16,7 @@ from .query import search_report
 from .report import save_analysis_html
 from .runtime import enrich_with_runtime_observations
 from .server import serve_workspace
+from .studio import serve_studio
 from .workspace import add_analysis, init_workspace, read_workspace
 
 
@@ -107,11 +108,17 @@ def main() -> None:
     wss = ws.add_parser("status")
     wss.add_argument("root")
 
-    serve = sub.add_parser("serve", help="Open the local read-only workspace IDE")
+    serve = sub.add_parser("serve", help="Open the classic local read-only workspace IDE")
     serve.add_argument("root", help="Workspace directory containing blc-workspace.json")
     serve.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
     serve.add_argument("--port", type=int, default=8765, help="Bind port (default: 8765; 0 selects a free port)")
     serve.add_argument("--open", action="store_true", dest="open_browser", help="Open the workspace in the default browser")
+
+    studio = sub.add_parser("studio", help="Open the premium local investigation studio with Analyst + Graph Explorer")
+    studio.add_argument("root", help="Workspace directory containing blc-workspace.json")
+    studio.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
+    studio.add_argument("--port", type=int, default=8876, help="Bind port (default: 8876; 0 selects a free port)")
+    studio.add_argument("--open", action="store_true", dest="open_browser", help="Open Studio in the default browser")
 
     args = parser.parse_args()
 
@@ -194,6 +201,10 @@ def main() -> None:
 
     if args.command == "serve":
         serve_workspace(args.root, host=args.host, port=max(0, args.port), open_browser=args.open_browser)
+        return
+
+    if args.command == "studio":
+        serve_studio(args.root, host=args.host, port=max(0, args.port), open_browser=args.open_browser)
         return
 
     if args.workspace_command == "init":
