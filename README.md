@@ -2,65 +2,49 @@
 
 Evidence-first reverse engineering workspace for **authorized application security, debugging, malware research, interoperability and CTF/lab analysis**.
 
-## v0.6 alpha — integrated analysis workflow
+## v0.7 alpha — feature-complete core milestone
 
-- Android/native artifact inventory and fingerprints.
-- JADX decompilation, deobfuscation/readability recovery and safe Base64/hex normalization.
-- Decompiler-failure and control-flow hotspot detection.
-- Ghidra Headless native function inventory with shape fingerprints.
-- Java `native` → JNI export correlation and dynamic-registration signals.
-- Defensive packer/protector and stripped-symbol profiling.
-- Cross-version native semantic matching and reuse ratios.
-- `BLCEvidenceGraph` provenance.
-- Authorized runtime-observation **import** (no hidden execution).
-- Persistent project workspace history.
-- Tool readiness `doctor` command.
-- Self-contained HTML reports.
+The core workflow now covers artifact inventory, managed/native recovery, cross-version intelligence, evidence correlation, project persistence and human/machine reporting.
 
-### Deep mode
+- `--deep` ordered analysis profile: JADX recovery → decompiler hotspots → Ghidra native analysis → protection profile → JNI correlation.
+- `BLCEvidenceGraph` provenance and confidence.
+- Safe reversible Base64/hex recovery; protected cryptographic content is not falsely “decrypted.”
+- Ghidra function shape fingerprints and cross-version semantic matching.
+- Java `native` → JNI export links plus dynamic-registration signals.
+- Defensive protector/packer, obfuscation and stripped-symbol inventory.
+- Authorized runtime-observation import.
+- Persistent workspaces and build history.
+- Interactive self-contained HTML workspace with evidence search.
+- Portable `.blc.zip` bundles containing machine JSON + HTML + optional version diff.
+- `doctor` environment diagnostics.
+- Python 3.11/3.12/3.13 CI matrix plus package build smoke tests.
+- Tag/manual release-build workflow.
 
 ```bash
+# Deep authorized analysis
 blc-reverselab analyze app.apk --deep --workdir .blc-work --html-report report.html -o analysis.json
-```
 
-`--deep` enables managed recovery + decompiler hotspots + Ghidra native analysis + protection profiling + JNI correlation in one ordered pipeline.
+# Build-to-build intelligence
+blc-reverselab diff old.analysis.json new.analysis.json -o version-diff.json
 
-### Runtime evidence
+# Portable review bundle
+blc-reverselab bundle analysis.json --version-diff version-diff.json -o app-review.blc.zip
 
-Runtime observations collected in an explicitly authorized lab can be attached to an existing report:
-
-```bash
+# Import observations collected in an authorized lab
 blc-reverselab enrich analysis.json --runtime runtime-observations.json -o enriched.json
-```
 
-The importer accepts observations such as JNI registrations, observed calls, plaintext observations and loaded modules. It does not perform stealth, bypasses or unauthorized instrumentation.
-
-### Workspace
-
-```bash
+# Project history
 blc-reverselab workspace init ./project --name MyApp
 blc-reverselab workspace add ./project analysis.json
-blc-reverselab workspace status ./project
-```
 
-### Environment check
-
-```bash
+# Tool readiness
 blc-reverselab doctor
 ```
 
-### Version intelligence
-
-```bash
-blc-reverselab diff old.analysis.json new.analysis.json -o version-diff.json
-```
-
-Stable names are preferred for native matching. Stripped functions are only shape-matched when the shape is unique; those matches are explicitly lower confidence.
-
 ## Recovery limits
 
-Obfuscation may permanently remove original names/comments. Cryptographic content without an authorized key or observed plaintext is recorded as protected evidence rather than falsely “decrypted.”
+Obfuscation may permanently remove original names, comments and high-level structure. Native stripping may also destroy original symbols. ReverseLab produces the most faithful evidence-backed readable model it can; semantic names that cannot be proven are not presented as original source names.
 
 ## Scope
 
-BLCReverseLab does not provide anti-cheat bypass, stealth, credential theft, signature/integrity bypass or online-cheating automation.
+BLCReverseLab does not provide anti-cheat bypass, stealth, credential theft, signature/integrity bypass or online-cheating automation. See `SECURITY.md`.

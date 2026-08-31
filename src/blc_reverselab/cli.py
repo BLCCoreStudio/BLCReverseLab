@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .bundle import create_bundle
 from .diff import compare
 from .doctor import doctor
 from .pipeline import Pipeline
@@ -29,6 +30,7 @@ def main() -> None:
     analyze.add_argument("--html-report", type=Path); analyze.add_argument("--workdir", default=".blc-reverselab")
     diff = sub.add_parser("diff"); diff.add_argument("before"); diff.add_argument("after"); diff.add_argument("-o", "--output")
     report = sub.add_parser("report"); report.add_argument("analysis"); report.add_argument("-o", "--output", default="reverselab-report.html")
+    bundle = sub.add_parser("bundle"); bundle.add_argument("analysis"); bundle.add_argument("--version-diff", type=Path); bundle.add_argument("-o", "--output", default="reverselab.blc.zip")
     sub.add_parser("doctor")
     enrich = sub.add_parser("enrich"); enrich.add_argument("analysis"); enrich.add_argument("--runtime", required=True, type=Path); enrich.add_argument("-o", "--output", default="analysis.enriched.json")
     workspace = sub.add_parser("workspace"); ws = workspace.add_subparsers(dest="workspace_command", required=True)
@@ -51,6 +53,9 @@ def main() -> None:
             output = Path(args.output); output.parent.mkdir(parents=True, exist_ok=True); output.write_text(payload + "\n", encoding="utf-8"); print(f"\nSaved: {output}")
         return
     if args.command == "report": print(f"Saved: {save_analysis_html(_load(args.analysis), args.output)}"); return
+    if args.command == "bundle":
+        version_diff = _load(args.version_diff) if args.version_diff else None
+        print(f"Saved: {create_bundle(_load(args.analysis), args.output, version_diff=version_diff)}"); return
     if args.command == "doctor": print(json.dumps(doctor(), indent=2, sort_keys=True)); return
     if args.command == "enrich":
         enriched = enrich_with_runtime_observations(_load(args.analysis), _load(args.runtime)); output = Path(args.output)
