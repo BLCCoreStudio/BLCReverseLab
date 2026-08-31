@@ -4,13 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blc-reverselab"
-version = "0.9.0a1"
-description = "Evidence-first reverse engineering workspace for authorized analysis."
+version = "1.0.0rc1"
+description = "Evidence-first reverse engineering workspace for authorized application-security analysis."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 authors = [{name = "BLCCoreStudio"}]
+keywords = ["reverse-engineering", "application-security", "android", "jadx", "ghidra", "binary-analysis"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+  "Topic :: Software Development :: Debuggers",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/BLCCoreStudio/BLCReverseLab"
+Repository = "https://github.com/BLCCoreStudio/BLCReverseLab"
+Issues = "https://github.com/BLCCoreStudio/BLCReverseLab/issues"
 
 [project.scripts]
 blc-reverselab = "blc_reverselab.cli:main"
