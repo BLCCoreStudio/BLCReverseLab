@@ -16,8 +16,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -U pip build
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, tomllib
+          version=tomllib.load(open('pyproject.toml','rb'))['project']['version']
+          tag=os.environ['GITHUB_REF_NAME']
+          accepted={'v'+version, 'v'+version.replace('rc','-rc.')}
+          assert tag in accepted, f'tag {tag!r} does not match package version {version!r}'
+          PY
+      - run: python -m pip install -U pip pytest build
+      - run: python -m pip install -e .
+      - run: pytest -q
       - run: python -m build
+      - run: python -m pip install --force-reinstall dist/*.whl
+      - run: blc-reverselab --help
+      - name: Generate SHA-256 checksums
+        shell: bash
+        run: sha256sum dist/* > dist/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: BLCReverseLab-python-package
