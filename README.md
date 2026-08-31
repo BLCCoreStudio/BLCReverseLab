@@ -2,34 +2,51 @@
 
 Evidence-first reverse engineering workspace for **authorized application security, debugging, malware research, interoperability and CTF/lab analysis**.
 
-## v0.5 alpha
+## v0.6 alpha — integrated analysis workflow
 
-The project now connects the managed and native sides of an application instead of treating decompilers as isolated tools.
+- Android/native artifact inventory and fingerprints.
+- JADX decompilation, deobfuscation/readability recovery and safe Base64/hex normalization.
+- Decompiler-failure and control-flow hotspot detection.
+- Ghidra Headless native function inventory with shape fingerprints.
+- Java `native` → JNI export correlation and dynamic-registration signals.
+- Defensive packer/protector and stripped-symbol profiling.
+- Cross-version native semantic matching and reuse ratios.
+- `BLCEvidenceGraph` provenance.
+- Authorized runtime-observation **import** (no hidden execution).
+- Persistent project workspace history.
+- Tool readiness `doctor` command.
+- Self-contained HTML reports.
 
-### Working core
-
-- APK/AAB/APKS/XAPK/DEX/SO/EXE/DLL fingerprinting and Android package inventory.
-- `BLCEvidenceGraph` with provenance and confidence.
-- Real optional JADX decompilation and readability/deobfuscation recovery.
-- Safe Base64/hex normalization plus high-entropy/protected-content signals.
-- Real optional Ghidra Headless native analysis.
-- Native function inventory with body size, instruction count, parameter count and stable **shape fingerprints**.
-- Java `native` declaration discovery and static JNI export correlation.
-- Dynamic JNI-registration signal detection (`JNI_OnLoad` / `RegisterNatives` evidence).
-- Defensive packer/protector fingerprint inventory and protection scoring.
-- Cross-version native semantic matching using stable names and unique function shapes.
-- Build-to-build diff with same-name changed file detection and native-function reuse ratios.
-- Self-contained HTML analysis report.
-
-### One-command deep analysis
+### Deep mode
 
 ```bash
-blc-reverselab analyze app.apk \
-  --recover \
-  --ghidra \
-  --workdir .blc-work \
-  --html-report report.html \
-  -o analysis.json
+blc-reverselab analyze app.apk --deep --workdir .blc-work --html-report report.html -o analysis.json
+```
+
+`--deep` enables managed recovery + decompiler hotspots + Ghidra native analysis + protection profiling + JNI correlation in one ordered pipeline.
+
+### Runtime evidence
+
+Runtime observations collected in an explicitly authorized lab can be attached to an existing report:
+
+```bash
+blc-reverselab enrich analysis.json --runtime runtime-observations.json -o enriched.json
+```
+
+The importer accepts observations such as JNI registrations, observed calls, plaintext observations and loaded modules. It does not perform stealth, bypasses or unauthorized instrumentation.
+
+### Workspace
+
+```bash
+blc-reverselab workspace init ./project --name MyApp
+blc-reverselab workspace add ./project analysis.json
+blc-reverselab workspace status ./project
+```
+
+### Environment check
+
+```bash
+blc-reverselab doctor
 ```
 
 ### Version intelligence
@@ -38,20 +55,12 @@ blc-reverselab analyze app.apk \
 blc-reverselab diff old.analysis.json new.analysis.json -o version-diff.json
 ```
 
-When Ghidra fingerprints exist in both reports, the diff can correlate functions even when addresses move. Stable original names are preferred; stripped/generic functions can be correlated only when a function shape is unique, and those matches carry lower confidence.
+Stable names are preferred for native matching. Stripped functions are only shape-matched when the shape is unique; those matches are explicitly lower confidence.
 
-### Java → JNI → native
+## Recovery limits
 
-ReverseLab indexes decompiled Java `native` declarations, computes their expected static JNI exports and correlates them with Ghidra-discovered symbols. Unresolved declarations remain unresolved rather than being guessed. Dynamic-registration signals are recorded separately.
+Obfuscation may permanently remove original names/comments. Cryptographic content without an authorized key or observed plaintext is recorded as protected evidence rather than falsely “decrypted.”
 
-### Protection model
-
-Protection detection is **defensive inventory**, not bypass logic. The report can record recognizable wrapper/protector fingerprints, strong obfuscation, unresolved high-entropy content and heavily stripped native surfaces so authorized reviewers know where deeper testing is needed.
-
-### Recovery limits
-
-Obfuscation can destroy original names, comments and high-level structure. ReverseLab never claims to reconstruct unavailable original source byte-for-byte. Cryptographic content without an authorized key or observed plaintext is recorded as protected evidence rather than falsely “decrypted.”
-
-### Scope
+## Scope
 
 BLCReverseLab does not provide anti-cheat bypass, stealth, credential theft, signature/integrity bypass or online-cheating automation.
