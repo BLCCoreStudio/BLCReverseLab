@@ -40,7 +40,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - run: sdkmanager "build-tools;${ANDROID_BUILD_TOOLS}"
       - run: python -m pip install -e .
       - name: Install pinned JADX
