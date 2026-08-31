@@ -84,7 +84,7 @@ jobs:
           assert any('example.invalid' in x for x in f['managed_index'].get('endpoints', [])), f['managed_index']
           print('JADX integration PASS')
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: reverselab-jadx-integration
           path: dex.analysis.json
@@ -134,7 +134,7 @@ jobs:
           assert any('Java_com_blc_fixture_Sample_nativeTick' in x for x in g.get('jni_candidates', [])), g
           print('Ghidra integration PASS')
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: reverselab-ghidra-integration
