@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/external-tools.yml'
+      - 'pyproject.toml'
       - 'src/blc_reverselab/adapters/ghidra.py'
       - 'src/blc_reverselab/adapters/jadx.py'
       - 'src/blc_reverselab/ghidra_scripts/**'

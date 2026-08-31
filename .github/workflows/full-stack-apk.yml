@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/full-stack-apk.yml'
+      - 'pyproject.toml'
       - 'src/blc_reverselab/**'
   schedule:
     - cron: '11 5 * * 1'
