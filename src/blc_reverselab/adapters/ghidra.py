@@ -196,7 +196,14 @@ class GhidraAdapter:
         if not binary:
             return GhidraResult(available=False, status="unavailable", target=str(target))
 
-        digest = hashlib.sha256(str(target.resolve()).encode("utf-8")).hexdigest()[:12]
+        # Ghidra rejects local project paths containing a path element that starts
+        # with a dot (for example `.blc-reverselab`). Resolving the adapter root
+        # first gives Headless an absolute project location whose elements are
+        # valid even when the user intentionally chose a hidden work directory.
+        output_root = output_root.expanduser().resolve()
+        target = target.expanduser().resolve()
+
+        digest = hashlib.sha256(str(target).encode("utf-8")).hexdigest()[:12]
         project_dir = output_root / "projects"
         project_dir.mkdir(parents=True, exist_ok=True)
         inventory_dir = output_root / "inventories"
