@@ -1,0 +1,134 @@
+name: Full-Stack APK Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/full-stack-apk.yml'
+      - 'src/blc_reverselab/**'
+  schedule:
+    - cron: '11 5 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-stack-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JADX_VERSION: '1.5.6'
+  JADX_SHA256: '545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974'
+  GHIDRA_VERSION: '12.1.3'
+  GHIDRA_BUILD_DATE: '20260817'
+  GHIDRA_SHA256: '93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54'
+  ANDROID_PLATFORM: '35'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+
+jobs:
+  deep-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK pieces
+        run: sdkmanager "platforms;android-${ANDROID_PLATFORM}" "build-tools;${ANDROID_BUILD_TOOLS}"
+      - run: python -m pip install -e .
+      - name: Install pinned JADX and Ghidra
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools/jadx
+          curl -fL --retry 3 -o /tmp/jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VERSION}/jadx-${JADX_VERSION}.zip"
+          echo "${JADX_SHA256}  /tmp/jadx.zip" | sha256sum -c -
+          unzip -q /tmp/jadx.zip -d tools/jadx
+          curl -fL --retry 3 -o /tmp/ghidra.zip "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_${GHIDRA_VERSION}_build/ghidra_${GHIDRA_VERSION}_PUBLIC_${GHIDRA_BUILD_DATE}.zip"
+          echo "${GHIDRA_SHA256}  /tmp/ghidra.zip" | sha256sum -c -
+          unzip -q /tmp/ghidra.zip -d tools
+          echo "$PWD/tools/jadx/bin" >> "$GITHUB_PATH"
+          echo "$PWD/tools/ghidra_${GHIDRA_VERSION}_PUBLIC/support" >> "$GITHUB_PATH"
+      - name: Build a valid synthetic APK with DEX + native JNI library
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fixture/src/com/blc/fixture fixture/classes fixture/dex fixture/apk/lib/arm64-v8a
+          cat > fixture/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.blc.fixture">
+            <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+            <application android:label="BLC Fixture" android:debuggable="false">
+              <activity android:name="android.app.Activity" android:exported="false" />
+            </application>
+          </manifest>
+          EOF
+          cat > fixture/src/com/blc/fixture/Sample.java <<'EOF'
+          package com.blc.fixture;
+          public final class Sample {
+              static { System.loadLibrary("fixture"); }
+              public static native int nativeTick(int value);
+              public String endpoint() { return "https://example.invalid/api/v1/inventory"; }
+              public String encodedLabel() { return "SGVsbG8gQkxD"; }
+          }
+          EOF
+          javac -source 8 -target 8 -d fixture/classes fixture/src/com/blc/fixture/Sample.java
+          jar cf fixture/classes.jar -C fixture/classes .
+          "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/d8" fixture/classes.jar --output fixture/dex
+          cat > fixture/native.c <<'EOF'
+          __attribute__((visibility("default"))) int Java_com_blc_fixture_Sample_nativeTick(void* env, void* clazz, int value) { return value + 9; }
+          __attribute__((visibility("default"))) int helper_transform(int value) { return value * 5 + 1; }
+          EOF
+          gcc -shared -fPIC -O1 -o fixture/apk/lib/arm64-v8a/libfixture.so fixture/native.c
+          "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/aapt2" link \
+            -I "$ANDROID_HOME/platforms/android-${ANDROID_PLATFORM}/android.jar" \
+            --manifest fixture/AndroidManifest.xml \
+            -o fixture/base.apk
+          cp fixture/dex/classes.dex fixture/apk/classes.dex
+          (cd fixture/apk && zip -q -r ../payload.zip .)
+          cp fixture/base.apk fixture/deep-fixture.apk
+          zip -q -j fixture/deep-fixture.apk fixture/apk/classes.dex
+          (cd fixture/apk && zip -q -r ../deep-fixture.apk lib)
+          unzip -l fixture/deep-fixture.apk
+      - name: Run the complete deep pipeline
+        run: |
+          blc-reverselab analyze fixture/deep-fixture.apk --deep --workdir .blc-full-stack --html-report full-stack.html -o full-stack.analysis.json
+      - name: Assert managed/native/correlation/recovery layers
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('full-stack.analysis.json'))
+          f=r['facts']
+          assert r['file_type'] == 'apk'
+          assert f['jadx']['status'] == 'completed', f['jadx']
+          assert f['managed_index']['class_count'] >= 1, f['managed_index']
+          assert any('example.invalid' in x for x in f['managed_index'].get('endpoints', [])), f['managed_index']
+          assert f['ghidra']['status'] == 'completed', f['ghidra']
+          assert f['ghidra']['function_count'] > 0, f['ghidra']
+          assert f['ghidra']['jni_candidate_count'] >= 1, f['ghidra']
+          x=f['jni_crossrefs']
+          assert x['declaration_count'] >= 1, x
+          assert x['matched_declaration_count'] >= 1, x
+          assert f['recovery']['status'] == 'completed', f['recovery']
+          assert len(r.get('evidence', [])) > 0
+          assert r['evidence_graph']['stats']['node_count'] == len(r['evidence'])
+          assert open('full-stack.html', encoding='utf-8').read().startswith('<!doctype html>')
+          print('Full-stack APK integration PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reverselab-full-stack-apk
+          if-no-files-found: warn
+          path: |
+            full-stack.analysis.json
+            full-stack.html
+            .blc-full-stack/**/logs/**
+            .blc-full-stack/**/inventories/**

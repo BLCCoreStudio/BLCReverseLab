@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability in BLCReverseLab
+    url: https://github.com/BLCCoreStudio/BLCReverseLab/security
+    about: Prefer private security reporting for vulnerabilities in this project itself.
