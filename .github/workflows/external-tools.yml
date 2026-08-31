@@ -1,0 +1,135 @@
+name: External Tool Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/external-tools.yml'
+  schedule:
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: external-tools-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JADX_VERSION: '1.5.6'
+  JADX_SHA256: '545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974'
+  GHIDRA_VERSION: '12.1.3'
+  GHIDRA_BUILD_DATE: '20260817'
+  GHIDRA_SHA256: '93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+
+jobs:
+  jadx-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "build-tools;${ANDROID_BUILD_TOOLS}"
+      - run: python -m pip install -e .
+      - name: Install pinned JADX
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools/jadx
+          curl -fL --retry 3 -o /tmp/jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VERSION}/jadx-${JADX_VERSION}.zip"
+          echo "${JADX_SHA256}  /tmp/jadx.zip" | sha256sum -c -
+          unzip -q /tmp/jadx.zip -d tools/jadx
+          echo "$PWD/tools/jadx/bin" >> "$GITHUB_PATH"
+      - name: Build a real DEX fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fixture-src/com/blc/fixture fixture-classes fixture-dex
+          cat > fixture-src/com/blc/fixture/Sample.java <<'EOF'
+          package com.blc.fixture;
+          public final class Sample {
+              public static native int nativeTick(int value);
+              public String endpoint() { return "https://example.invalid/api/v1/inventory"; }
+              public int add(int a, int b) { return a + b; }
+          }
+          EOF
+          javac -source 8 -target 8 -d fixture-classes fixture-src/com/blc/fixture/Sample.java
+          jar cf fixture.jar -C fixture-classes .
+          "$ANDROID_HOME/build-tools/${ANDROID_BUILD_TOOLS}/d8" fixture.jar --output fixture-dex
+      - name: Run ReverseLab through real JADX
+        run: blc-reverselab analyze fixture-dex/classes.dex --recover --workdir .integration -o dex.analysis.json
+      - name: Assert JADX evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('dex.analysis.json'))
+          f=r['facts']
+          assert f['jadx']['status'] == 'completed', f['jadx']
+          assert f['jadx']['java_file_count'] >= 1, f['jadx']
+          assert f['managed_index']['class_count'] >= 1, f['managed_index']
+          assert any('example.invalid' in x for x in f['managed_index'].get('endpoints', [])), f['managed_index']
+          print('JADX integration PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reverselab-jadx-integration
+          path: dex.analysis.json
+
+  ghidra-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: python -m pip install -e .
+      - name: Install pinned Ghidra
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/ghidra.zip "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_${GHIDRA_VERSION}_build/ghidra_${GHIDRA_VERSION}_PUBLIC_${GHIDRA_BUILD_DATE}.zip"
+          echo "${GHIDRA_SHA256}  /tmp/ghidra.zip" | sha256sum -c -
+          unzip -q /tmp/ghidra.zip -d tools
+          echo "$PWD/tools/ghidra_${GHIDRA_VERSION}_PUBLIC/support" >> "$GITHUB_PATH"
+      - name: Build a real native fixture
+        shell: bash
+        run: |
+          cat > fixture.c <<'EOF'
+          #include <stdint.h>
+          __attribute__((visibility("default"))) int Java_com_blc_fixture_Sample_nativeTick(void* env, void* clazz, int value) { return value + 7; }
+          __attribute__((visibility("default"))) int helper_transform(int value) { return (value * 3) ^ 0x55; }
+          EOF
+          gcc -shared -fPIC -O1 -o libfixture.so fixture.c
+      - name: Run ReverseLab through real Ghidra Headless
+        run: blc-reverselab analyze libfixture.so --ghidra --ghidra-timeout 180 --workdir .integration -o native.analysis.json
+      - name: Assert native inventory
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('native.analysis.json'))
+          g=r['facts']['ghidra']
+          assert g['status'] in {'completed','partial'}, g
+          assert g['function_count'] > 0, g
+          assert any('Java_com_blc_fixture_Sample_nativeTick' in x for x in g.get('jni_candidates', [])), g
+          print('Ghidra integration PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reverselab-ghidra-integration
+          path: native.analysis.json
