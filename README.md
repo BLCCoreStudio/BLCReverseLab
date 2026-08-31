@@ -2,6 +2,21 @@
 
 Evidence-first reverse-engineering workspace for **authorized application security, debugging, malware research, interoperability and CTF/lab analysis**.
 
+## Current main — unreleased
+
+The current `main` branch adds **Investigation Studio**, a premium local read-only investigation surface on top of the 1.1 analysis core:
+
+- Evidence Analyst and its supporting evidence are visible in the same workspace.
+- Managed/JNI/native/network/recovery/evidence nodes are rendered as a cross-layer graph.
+- Universal Search and raw proven facts remain available beside the graph.
+- Studio binds to `127.0.0.1` by default and does not add a paid API dependency.
+
+Launch it with:
+
+```bash
+blc-reverselab studio ./my-lab --open
+```
+
 ## 1.1.0
 
 1.1 keeps the stable 1.0 analysis core and adds a higher-level investigation layer:
@@ -48,6 +63,9 @@ blc-reverselab workspace init ./my-lab --name "My App Lab"
 blc-reverselab workspace add ./my-lab analysis.json
 blc-reverselab serve ./my-lab --open
 
+# Current main: premium local Investigation Studio
+blc-reverselab studio ./my-lab --open
+
 blc-reverselab bundle analysis.json --version-diff version-diff.json -o review.blc.zip
 ```
 
@@ -57,7 +75,7 @@ ReverseLab keeps uncertainty explicit. Obfuscation or symbol stripping can perma
 
 `ask` is evidence retrieval and synthesis, not a claim that the tool recovered information absent from the report. Third-party plugins execute as local Python code with the user's privileges, so install and run only plugins you trust.
 
-The local IDE is read-only and binds to `127.0.0.1` by default.
+The local IDE and Investigation Studio are read-only and bind to `127.0.0.1` by default.
 
 ## Optional tools
 
