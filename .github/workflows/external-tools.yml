@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/external-tools.yml'
+      - 'src/blc_reverselab/adapters/ghidra.py'
+      - 'src/blc_reverselab/adapters/jadx.py'
+      - 'src/blc_reverselab/ghidra_scripts/**'
   schedule:
     - cron: '17 4 * * 1'
 
@@ -33,7 +36,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -93,7 +96,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -109,6 +112,7 @@ jobs:
       - name: Build a real native fixture
         shell: bash
         run: |
+          set -euo pipefail
           cat > fixture.c <<'EOF'
           #include <stdint.h>
           __attribute__((visibility("default"))) int Java_com_blc_fixture_Sample_nativeTick(void* env, void* clazz, int value) { return value + 7; }
@@ -124,12 +128,17 @@ jobs:
           import json
           r=json.load(open('native.analysis.json'))
           g=r['facts']['ghidra']
-          assert g['status'] in {'completed','partial'}, g
+          assert g['status'] == 'completed', g
           assert g['function_count'] > 0, g
           assert any('Java_com_blc_fixture_Sample_nativeTick' in x for x in g.get('jni_candidates', [])), g
           print('Ghidra integration PASS')
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: reverselab-ghidra-integration
-          path: native.analysis.json
+          if-no-files-found: warn
+          path: |
+            native.analysis.json
+            .integration/**/logs/**
+            .integration/**/inventories/**

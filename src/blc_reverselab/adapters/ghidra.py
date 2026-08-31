@@ -19,6 +19,15 @@ def _shape_id(
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
+def _tail(path: Path, limit: int = 6000) -> str:
+    if not path.is_file():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")[-limit:]
+    except OSError:
+        return ""
+
+
 @dataclass(slots=True)
 class GhidraFunction:
     address: str
@@ -72,7 +81,10 @@ class GhidraResult:
     jni_candidates: list[str] = field(default_factory=list)
     function_sample: list[dict[str, Any]] = field(default_factory=list)
     function_fingerprints: list[dict[str, Any]] = field(default_factory=list)
+    stdout_tail: str = ""
     stderr_tail: str = ""
+    application_log_tail: str = ""
+    script_log_tail: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -149,8 +161,11 @@ class GhidraAdapter:
         project_dir: Path,
         project_name: str,
         inventory_path: Path,
+        *,
+        application_log: Path | None = None,
+        script_log: Path | None = None,
     ) -> list[str]:
-        return [
+        command = [
             binary,
             str(project_dir),
             project_name,
@@ -161,11 +176,20 @@ class GhidraAdapter:
             str(self.timeout_seconds),
             "-scriptPath",
             str(self.script_dir()),
-            "-postScript",
-            "BLCExportFunctions.java",
-            str(inventory_path),
-            "-deleteProject",
         ]
+        if application_log is not None:
+            command.extend(["-log", str(application_log)])
+        if script_log is not None:
+            command.extend(["-scriptlog", str(script_log)])
+        command.extend(
+            [
+                "-postScript",
+                "BLCExportFunctions.java",
+                str(inventory_path),
+                "-deleteProject",
+            ]
+        )
+        return command
 
     def analyze(self, target: Path, output_root: Path) -> GhidraResult:
         binary = self.resolve()
@@ -177,10 +201,22 @@ class GhidraAdapter:
         project_dir.mkdir(parents=True, exist_ok=True)
         inventory_dir = output_root / "inventories"
         inventory_dir.mkdir(parents=True, exist_ok=True)
+        log_dir = output_root / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
         inventory_path = inventory_dir / f"{target.name}-{digest}.functions.tsv"
+        application_log = log_dir / f"{target.name}-{digest}.application.log"
+        script_log = log_dir / f"{target.name}-{digest}.script.log"
         project_name = f"blc_{digest}"
 
-        command = self.build_command(binary, target, project_dir, project_name, inventory_path)
+        command = self.build_command(
+            binary,
+            target,
+            project_dir,
+            project_name,
+            inventory_path,
+            application_log=application_log,
+            script_log=script_log,
+        )
         try:
             completed = subprocess.run(
                 command,
@@ -191,13 +227,17 @@ class GhidraAdapter:
             )
         except subprocess.TimeoutExpired as exc:
             stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+            stdout = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
             return GhidraResult(
                 available=True,
                 status="timeout",
                 target=str(target),
                 binary=binary,
-                inventory_path=str(inventory_path),
-                stderr_tail=stderr[-3000:],
+                inventory_path=str(inventory_path) if inventory_path.is_file() else None,
+                stdout_tail=stdout[-6000:],
+                stderr_tail=stderr[-6000:],
+                application_log_tail=_tail(application_log),
+                script_log_tail=_tail(script_log),
             )
 
         functions, sample, fingerprints = parse_function_inventory(
@@ -222,5 +262,8 @@ class GhidraAdapter:
             jni_candidates=jni[:100],
             function_sample=sample,
             function_fingerprints=fingerprints,
-            stderr_tail=(completed.stderr or "")[-3000:],
+            stdout_tail=(completed.stdout or "")[-6000:],
+            stderr_tail=(completed.stderr or "")[-6000:],
+            application_log_tail=_tail(application_log),
+            script_log_tail=_tail(script_log),
         )
